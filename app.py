@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "temporary_dev_key_123")
-app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_SECURE"] = False
 
 # ================= OTP CONFIG =================
 
@@ -64,14 +64,13 @@ def send_otp():
     }
 
     try:
-        r = requests.post(
-            OTP_BASE_URL,
-            json=payload,
-            headers=headers,
-            timeout=15
-        )
+      r = requests.post(OTP_BASE_URL, json=payload, headers=headers)
 
-        data = r.json()
+print("SEND OTP STATUS:", r.status_code)
+print("SEND OTP RESPONSE:", r.text)
+
+data = r.json()
+
 
         print("======= OTP SEND =======")
         print("STATUS:", r.status_code)
@@ -92,50 +91,38 @@ def send_otp():
 
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
-
     mobile = request.form.get("mobile")
-    otp = request.form.get("otp", "").strip()
+    otp = request.form.get("otp")
 
-    if not otp.isdigit():
-        return "Invalid OTP", 400
+    message_id = verification_store.get(mobile)
 
-    if session.get("pending_mobile") != mobile:
-        return "Session expired. Request OTP again.", 400
+    if not message_id:
+        return "OTP expired. Please request again.", 400
 
-    params = {
-        "code": otp,
-        "phone": f"91{mobile}"
+    payload = {
+        "data": {
+            "otp": otp,
+            "message_id": message_id
+        }
     }
 
     headers = {
         "X-OTP-Key": OTP_API_KEY,
-        "accept": "application/json"
+        "Content-Type": "application/json"
     }
 
-    try:
-        r = requests.get(
-            OTP_BASE_URL,
-            params=params,
-            headers=headers,
-            timeout=15
-        )
+    r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
+    result = r.json()
 
-        result = r.json()
+    print("VERIFY RESPONSE:", result)
 
-        print("======= OTP VERIFY =======")
-        print("STATUS:", r.status_code)
-        print("RESPONSE:", result)
-        print("==========================")
+    # ✅ REAL SUCCESS CHECK
+    if r.status_code in [200, 201] and result.get("data", {}).get("valid") is True:
+        session["user"] = mobile
+        verification_store.pop(mobile, None)
+        return redirect("/")
 
-        if r.status_code == 200 and len(result.get("data", [])) > 0:
-            session["user"] = mobile
-            session.pop("pending_mobile", None)
-            return redirect("/")
-
-        return f"Invalid OTP: {result}", 401
-
-    except Exception as e:
-        return f"Verify Failed: {str(e)}", 500
+    return "Invalid OTP", 401
 
 
 # ================= LOAN =================
@@ -190,3 +177,4 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
