@@ -204,5 +204,5 @@ def calculate():
     except Exception as e:
         return f"Error: {str(e)}", 400
 
-if __name__ == '__main__':
-    app.run(debug=False, port=8080, host='0.0.0.0', threaded=True)
+
+
