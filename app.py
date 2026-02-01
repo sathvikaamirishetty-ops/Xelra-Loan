@@ -84,41 +84,63 @@ def send_otp():
 def verify_otp():
     mobile = request.form.get("mobile")
     otp = request.form.get("otp", "").strip()
-    # Don't convert to int - keep as string
+
+    print(f"Received mobile: {mobile}, OTP: {otp}")
+
     if not otp or not otp.isdigit():
         return "Invalid OTP format. Enter numbers only.", 400
+
     message_id = session.get("pending_message_id")
-    if not message_id or session.get("pending_mobile") != mobile:
-        return "OTP expired. Please request again.", 400
+    session_mobile = session.get("pending_mobile")
+
+    print(f"Session message_id: {message_id}, Session mobile: {session_mobile}")
+
+    if not message_id or session_mobile != mobile:
+        return f"OTP expired. Session mobile: {session_mobile}, Input mobile: {mobile}", 400
+
     payload = {
         "data": {
-            "otp": otp,  # Keep as string
+            "otp": otp,
             "message_id": message_id
         }
     }
+
     headers = {
         "X-OTP-Key": OTP_API_KEY,
         "Content-Type": "application/json"
     }
+
     print("SENDING VERIFY PAYLOAD:", payload)
-    r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
-    result = r.json()
-    print("VERIFY RESPONSE:", result)
-    print("STATUS CODE:", r.status_code)
-    # Check for different success indicators
-    if r.status_code in [200, 201]:
-        data = result.get("data", {})
-        status = data.get("status")
-        verified = data.get("verified")
-        
-        print("STATUS:", status, "VERIFIED:", verified)
-        
-        if status == "verified" or verified == True:
-            session["user"] = mobile
-            session.pop("pending_message_id", None)
-            session.pop("pending_mobile", None)
-            return redirect("/")
-    return f"Invalid OTP. Response: {result}", 401
+    print("HEADERS:", headers)
+
+    try:
+        r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
+        result = r.json()
+
+        print("VERIFY RESPONSE:", result)
+        print("STATUS CODE:", r.status_code)
+        print("RESPONSE HEADERS:", dict(r.headers))
+
+        if r.status_code in [200, 201]:
+            data = result.get("data", {})
+            
+            # Try multiple ways to check verification
+            if (data.get("status") == "verified" or 
+                data.get("verified") == True or 
+                result.get("status") == "verified" or
+                result.get("verified") == True):
+                
+                session["user"] = mobile
+                session.pop("pending_message_id", None)
+                session.pop("pending_mobile", None)
+                return redirect("/")
+
+        return f"Verification failed. Status: {r.status_code}, Response: {result}", 401
+
+    except Exception as e:
+        print("ERROR:", str(e))
+        return f"Network error: {str(e)}", 500
+
 
 # ================= LOAN =================
 @app.route('/calculate', methods=['POST'])
@@ -171,4 +193,5 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
