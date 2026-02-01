@@ -17,7 +17,6 @@ OTP_SENDER = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
 OTP_TEMPLATE = "28791c9e-10b3-4740-aa38-6273244335fc"
 
 # WARNING: This dict will clear frequently on Vercel because of Serverless restarts.
-verification_store = {}
 
 # ================= FILTER =================
 @app.template_filter('currency')
@@ -177,4 +176,5 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
