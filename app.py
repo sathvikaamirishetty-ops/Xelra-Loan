@@ -65,21 +65,29 @@ def send_otp():
         r = requests.post(OTP_API_URL, json=payload, headers=headers, timeout=10)
         data = r.json()
         
-        # Log this so you can see the error in Vercel Dashboard -> Logs
-        print(f"OTP.dev Response: {data}")
+        # This will show up in your Vercel "Logs" tab. 
+        # Check this to see exactly what the API is sending.
+        print(f"FULL API RESPONSE: {data}")
 
-        # Defensive check to prevent KeyError
-        if r.status_code in [200, 201] and "data" in data and "verification_id" in data["data"]:
-            v_id = data["data"]["verification_id"]
-            verification_store[mobile] = v_id
-            return render_template("verify.html", mobile=mobile)
+        # Check for 200 or 201 Status
+        if r.status_code in [200, 201]:
+            # Try different ways the ID might be nested
+            v_id = None
+            if isinstance(data.get("data"), dict):
+                v_id = data["data"].get("verification_id")
+            elif "verification_id" in data:
+                v_id = data["verification_id"]
+
+            if v_id:
+                verification_store[mobile] = v_id
+                return render_template("verify.html", mobile=mobile)
+            else:
+                return f"API succeeded (201) but no verification_id found. Response: {data}", 500
         else:
-            error_detail = data.get("message") or data.get("error") or "Check API Key/Credits"
-            return f"OTP Service Error: {error_detail} (Status {r.status_code})", 500
+            return f"OTP Service Error: {data.get('message', 'Unknown')} (Status {r.status_code})", 500
 
     except Exception as e:
-        print(f"Connection Error: {e}")
-        return "Failed to connect to OTP service.", 500
+        return f"System error: {str(e)}", 500
 
 # ================= VERIFY OTP (FIXED) =================
 @app.route("/verify-otp", methods=["POST"])
@@ -176,3 +184,4 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
