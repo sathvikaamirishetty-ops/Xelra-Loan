@@ -7,9 +7,7 @@ app.secret_key = os.getenv("SECRET_KEY", "temporary_dev_key_123")
 app.config["SESSION_COOKIE_SECURE"] = True
 
 # ================= OTP CONFIG =================
-# Send OTP:   POST https://api.otp.dev/v1/verifications
-# Verify OTP: GET  https://api.otp.dev/v1/verifications?code={code}&phone={phone}
-# Both use the same base URL — verify is just a GET with query params.
+
 OTP_BASE_URL = "https://api.otp.dev/v1/verifications"
 
 OTP_API_KEY  = os.getenv("OTP_API_KEY", "df2ea0a6b3e0a83be76ba95f55995fb8")
@@ -17,31 +15,37 @@ OTP_SENDER   = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
 OTP_TEMPLATE = "28791c9e-10b3-4740-aa38-6273244335fc"
 
 # ================= FILTER =================
+
 @app.template_filter('currency')
 def format_currency(amount):
     try:
         return "₹{:,.0f}".format(float(amount))
-    except (ValueError, TypeError):
+    except:
         return "₹0"
 
 # ================= ROUTES =================
+
 @app.route("/")
 def home():
     if "user" not in session:
         return redirect("/login")
     return render_template("index.html")
 
+
 @app.route("/login")
 def login():
     return render_template("login.html")
 
+
 # ================= SEND OTP =================
+
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
+
     mobile = request.form.get("mobile")
 
     if not mobile or not mobile.isdigit() or len(mobile) != 10:
-        return "Invalid mobile number. Must be 10 digits.", 400
+        return "Invalid mobile number", 400
 
     payload = {
         "data": {
@@ -59,35 +63,45 @@ def send_otp():
         "accept": "application/json"
     }
 
-    r = requests.post(OTP_BASE_URL, json=payload, headers=headers)
-    data = r.json()
+    try:
+        r = requests.post(
+            OTP_BASE_URL,
+            json=payload,
+            headers=headers,
+            timeout=15
+        )
 
-    print("SEND OTP RESPONSE:", data)
+        data = r.json()
 
-    if r.status_code in [200, 201]:
-        # Store mobile in session so we know who's verifying
-        session["pending_mobile"] = mobile
-        return render_template("verify.html", mobile=mobile)
+        print("======= OTP SEND =======")
+        print("STATUS:", r.status_code)
+        print("RESPONSE:", data)
+        print("========================")
 
-    return f"OTP Send Error: {data}", 500
+        if r.status_code in [200, 201] and data.get("data"):
+            session["pending_mobile"] = mobile
+            return render_template("verify.html", mobile=mobile)
+
+        return f"OTP API Error: {data}", 500
+
+    except Exception as e:
+        return f"OTP Request Failed: {str(e)}", 500
+
 
 # ================= VERIFY OTP =================
+
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
+
     mobile = request.form.get("mobile")
-    otp    = request.form.get("otp", "").strip()
+    otp = request.form.get("otp", "").strip()
 
     if not otp.isdigit():
-        return "Invalid OTP format. Enter numbers only.", 400
+        return "Invalid OTP", 400
 
     if session.get("pending_mobile") != mobile:
-        return "Session lost. Please request a new OTP.", 400
+        return "Session expired. Request OTP again.", 400
 
-    # Per docs:
-    #   GET https://api.otp.dev/v1/verifications?code={code}&phone={phone}
-    #   - phone must include country code (e.g. 91XXXXXXXXXX)
-    #   - If returned "data" array is empty → code is invalid
-    #   - If returned "data" array has entries → code is valid
     params = {
         "code": otp,
         "phone": f"91{mobile}"
@@ -98,67 +112,81 @@ def verify_otp():
         "accept": "application/json"
     }
 
-    print("VERIFY REQUEST params:", params)
+    try:
+        r = requests.get(
+            OTP_BASE_URL,
+            params=params,
+            headers=headers,
+            timeout=15
+        )
 
-    r = requests.get(OTP_BASE_URL, params=params, headers=headers)
-    result = r.json()
+        result = r.json()
 
-    print("VERIFY RESPONSE:", result)
+        print("======= OTP VERIFY =======")
+        print("STATUS:", r.status_code)
+        print("RESPONSE:", result)
+        print("==========================")
 
-    # Valid = data array is non-empty. Invalid = data array is empty.
-    if r.status_code == 200 and len(result.get("data", [])) > 0:
-        session["user"] = mobile
-        session.pop("pending_mobile", None)
-        return redirect("/")
+        if r.status_code == 200 and len(result.get("data", [])) > 0:
+            session["user"] = mobile
+            session.pop("pending_mobile", None)
+            return redirect("/")
 
-    return f"Invalid OTP. API response: {result}", 401
+        return f"Invalid OTP: {result}", 401
+
+    except Exception as e:
+        return f"Verify Failed: {str(e)}", 500
+
 
 # ================= LOAN =================
+
 @app.route('/calculate', methods=['POST'])
 def calculate():
+
     if "user" not in session:
         return redirect("/login")
 
     try:
         income = float(request.form.get('income', 0))
-        emis   = float(request.form.get('existing_emis', 0))
-    except ValueError:
-        return "Please enter valid numbers for income and EMIs", 400
+        emis = float(request.form.get('existing_emis', 0))
+    except:
+        return "Invalid numbers", 400
 
     cibil = request.form.get('cibil_band')
 
     cibil_map = {
-        "650":      600,
-        "650–700":  675,
-        "700–750":  725,
-        "750+":     780
+        "650": 600,
+        "650–700": 675,
+        "700–750": 725,
+        "750+": 780
     }
 
-    score   = cibil_map.get(cibil, 700)
-    results = []
+    score = cibil_map.get(cibil, 700)
 
-    hdfc_amt = max((income * .55) - emis, 0) * 20 if score >= 700 else 0
-    bob_amt  = max((income * .45) - emis, 0) * 18 if score >= 680 else 0
+    hdfc = max((income * .55) - emis, 0) * 20 if score >= 700 else 0
+    bob = max((income * .45) - emis, 0) * 18 if score >= 680 else 0
 
-    results.append({
-        "bank_name":     "HDFC Bank",
-        "amount":        hdfc_amt,
-        "interest_rate": "8% – 12%",
-        "color_theme":   "#004c8f",
-        "logo_text":     "HDFC",
-        "details":       "Eligibility based on FOIR"
-    })
-
-    results.append({
-        "bank_name":     "Bank of Baroda",
-        "amount":        bob_amt,
-        "interest_rate": "9% – 14%",
-        "color_theme":   "#f26522",
-        "logo_text":     "BoB",
-        "details":       "Standard criteria"
-    })
+    results = [
+        {
+            "bank_name": "HDFC Bank",
+            "amount": hdfc,
+            "interest_rate": "8% – 12%",
+            "color_theme": "#004c8f",
+            "logo_text": "HDFC",
+            "details": "Eligibility based on FOIR"
+        },
+        {
+            "bank_name": "Bank of Baroda",
+            "amount": bob,
+            "interest_rate": "9% – 14%",
+            "color_theme": "#f26522",
+            "logo_text": "BoB",
+            "details": "Standard criteria"
+        }
+    ]
 
     return render_template("results.html", results=results, income=income)
+
 
 if __name__ == "__main__":
     app.run(debug=True)
