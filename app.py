@@ -1,15 +1,17 @@
 from flask import Flask, render_template, request, redirect, session
 import random
 import time
+import requests
+import json
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_demo'
 
-# In-memory store for OTPs
-otp_store = {}
-
-def generate_otp():
-    return random.randint(1000, 9999)
+# API Configuration
+OTP_API_URL = "https://api.otp.dev/v1/verifications"
+OTP_API_KEY = "df2ea0a6b3e0a83be76ba95f55995fb8"
+OTP_SENDER = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
+OTP_TEMPLATE = "28791c9e-10b3-4740-aa38-6273244335fc"
 
 # Currency filter
 def format_currency(amount):
@@ -37,42 +39,75 @@ def send_otp():
     if not mobile.isdigit() or len(mobile) != 10:
         return "Invalid mobile number"
 
-    otp = generate_otp()
-    expiry = time.time() + 300
+    # Add 91 prefix for API
+    phone_with_prefix = "91" + mobile
 
-    otp_store[mobile] = {
-        "otp": otp,
-        "expiry": expiry,
-        "attempts": 0
-    }
+    try:
+        payload = {
+            "data": {
+                "channel": "sms",
+                "sender": OTP_SENDER,
+                "phone": phone_with_prefix,
+                "template": OTP_TEMPLATE,
+                "code_length": 4
+            }
+        }
+        
+        headers = {
+            "X-OTP-Key": OTP_API_KEY,
+            "accept": "application/json",
+            "content-type": "application/json"
+        }
 
-    # SIMULATION: Print OTP to console AND write to file
-    print(f"\n{'='*30}\nSIMULATED SMS to {mobile}: Your OTP is {otp}\n{'='*30}\n")
-    
-    # Missing return statement in provided snippet added back to maintain flow
-    return render_template("verify.html", mobile=mobile)
+        response = requests.post(OTP_API_URL, json=payload, headers=headers)
+        
+        print(f"OTP Send Response: {response.status_code} - {response.text}")
+        
+        if response.status_code in [200, 201]:
+             return render_template("verify.html", mobile=mobile)
+        else:
+             return f"Failed to send OTP: {response.text}"
+
+    except Exception as e:
+        return f"Error sending OTP: {str(e)}"
 
 
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
     mobile = request.form["mobile"]
     entered_otp = request.form["otp"]
+    
+    # Add 91 prefix for API
+    phone_with_prefix = "91" + mobile
 
-    data = otp_store.get(mobile)
+    try:
+        headers = {
+            "X-OTP-Key": OTP_API_KEY,
+            "accept": "application/json"
+        }
+        
+        # Using GET method as per documentation found
+        verify_url = f"{OTP_API_URL}?code={entered_otp}&phone={phone_with_prefix}"
+        
+        response = requests.get(verify_url, headers=headers)
+        
+        print(f"OTP Verify Response: {response.status_code} - {response.text}")
 
-    if not data:
-        return "OTP not found"
+        # Check for success (usually 200 OK and data present)
+        if response.status_code == 200:
+            resp_json = response.json()
+            # If 'data' is present and success is indicated (API specific, but usually 200 with data implies success)
+            # The search result said "If the data field in the response is empty, it indicates that the code is invalid."
+            if resp_json.get("data"): 
+                session["user"] = mobile
+                return redirect("/")
+            else:
+                 return "Invalid or expired OTP"
+        else:
+            return "Invalid OTP (API Error)"
 
-    if time.time() > data["expiry"]:
-        del otp_store[mobile]
-        return "OTP expired"
-
-    if str(data["otp"]) == entered_otp:
-        session["user"] = mobile
-        del otp_store[mobile]
-        return redirect("/")
-    else:
-        return "Invalid OTP"
+    except Exception as e:
+        return f"Error verifying OTP: {str(e)}"
 
 
 @app.route("/logout")
@@ -169,4 +204,5 @@ def calculate():
     except Exception as e:
         return f"Error: {str(e)}", 400
 
-
+if __name__ == '__main__':
+    app.run(debug=False, port=8080, host='0.0.0.0', threaded=True)
