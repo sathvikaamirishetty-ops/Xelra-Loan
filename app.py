@@ -61,33 +61,25 @@ def send_otp():
         "Content-Type": "application/json"
     }
 
-    try:
-        r = requests.post(OTP_API_URL, json=payload, headers=headers, timeout=10)
-        data = r.json()
-        
-        # This will show up in your Vercel "Logs" tab. 
-        # Check this to see exactly what the API is sending.
-        print(f"FULL API RESPONSE: {data}")
+    r = requests.post(OTP_API_URL, json=payload, headers=headers)
+    data = r.json()
 
-        # Check for 200 or 201 Status
-        if r.status_code in [200, 201]:
-            # Try different ways the ID might be nested
-            v_id = None
-            if isinstance(data.get("data"), dict):
-                v_id = data["data"].get("verification_id")
-            elif "verification_id" in data:
-                v_id = data["verification_id"]
+    print("FULL OTP RESPONSE:", data)
 
-            if v_id:
-                verification_store[mobile] = v_id
-                return render_template("verify.html", mobile=mobile)
-            else:
-                return f"API succeeded (201) but no verification_id found. Response: {data}", 500
-        else:
-            return f"OTP Service Error: {data.get('message', 'Unknown')} (Status {r.status_code})", 500
+    if r.status_code in [200, 201]:
 
-    except Exception as e:
-        return f"System error: {str(e)}", 500
+        # ✅ USE message_id INSTEAD
+        message_id = data.get("data", {}).get("message_id")
+
+        if not message_id:
+            return f"No message_id found: {data}", 500
+
+        # Store message_id
+        verification_store[mobile] = message_id
+
+        return render_template("verify.html", mobile=mobile)
+
+    return f"OTP API Error: {data}", 500
 
 # ================= VERIFY OTP (FIXED) =================
 @app.route("/verify-otp", methods=["POST"])
@@ -95,16 +87,15 @@ def verify_otp():
     mobile = request.form.get("mobile")
     otp = request.form.get("otp")
 
-    # This is the most common fail point on Vercel (RAM clearing)
-    verification_id = verification_store.get(mobile)
+    message_id = verification_store.get(mobile)
 
-    if not verification_id:
-        return "Session expired. Please request a new OTP.", 400
+    if not message_id:
+        return "OTP expired. Please request again.", 400
 
     payload = {
         "data": {
             "otp": otp,
-            "verification_id": verification_id
+            "message_id": message_id   # ✅ HERE
         }
     }
 
@@ -113,25 +104,17 @@ def verify_otp():
         "Content-Type": "application/json"
     }
 
-    try:
-        r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers, timeout=10)
-        result = r.json()
-        
-        # Verify status - check if 'data' exists and status is 'verified'
-        inner_data = result.get("data", {})
-        if r.status_code in [200, 201] and inner_data.get("status") == "verified":
-            session["user"] = mobile
-            verification_store.pop(mobile, None) # Clean up
-            return redirect("/")
-        
-        return "Invalid OTP. Please try again.", 401
-    except Exception as e:
-        return f"Verification system error: {e}", 500
+    r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
+    result = r.json()
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/login")
+    print("VERIFY RESPONSE:", result)
+
+    if r.status_code in [200, 201] and result.get("data", {}).get("status") == "verified":
+        session["user"] = mobile
+        verification_store.pop(mobile, None)
+        return redirect("/")
+
+    return "Invalid OTP", 401
 
 # ================= LOAN =================
 @app.route('/calculate', methods=['POST'])
@@ -184,4 +167,5 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
