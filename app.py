@@ -44,7 +44,7 @@ def send_otp():
     mobile = request.form.get("mobile")
 
     if not mobile or not mobile.isdigit() or len(mobile) != 10:
-        return "Invalid mobile number. Must be 10 digits.", 400
+        return "Invalid mobile", 400
 
     payload = {
         "data": {
@@ -64,22 +64,31 @@ def send_otp():
     r = requests.post(OTP_API_URL, json=payload, headers=headers)
     data = r.json()
 
-    print("FULL OTP RESPONSE:", data)
+    print("SEND:", data)
 
-    if r.status_code in [200, 201]:
+    if r.status_code not in [200,201]:
+        return f"OTP send failed: {data}",500
 
-        # ✅ USE message_id INSTEAD
-        message_id = data.get("data", {}).get("message_id")
+    message_id = data.get("data",{}).get("message_id")
+    if not message_id:
+        return "No message_id",500
 
-        if not message_id:
-            return f"No message_id found: {data}", 500
+    # 🔥 GET VERIFICATION ID
+    lookup = requests.get(
+        OTP_LOOKUP_URL + message_id,
+        headers={"X-OTP-Key": OTP_API_KEY}
+    ).json()
 
-        # Store message_id
-        verification_store[mobile] = message_id
+    print("LOOKUP:", lookup)
 
-        return render_template("verify.html", mobile=mobile)
+    verification_id = lookup.get("data",{}).get("verification_id")
 
-    return f"OTP API Error: {data}", 500
+    if not verification_id:
+        return f"No verification_id: {lookup}",500
+
+    verification_store[mobile] = verification_id
+
+    return render_template("verify.html", mobile=mobile)
 
 # ================= VERIFY OTP (FIXED) =================
 @app.route("/verify-otp", methods=["POST"])
@@ -87,34 +96,33 @@ def verify_otp():
     mobile = request.form.get("mobile")
     otp = request.form.get("otp")
 
-    message_id = verification_store.get(mobile)
-
-    if not message_id:
-        return "OTP expired. Please request again.", 400
+    verification_id = verification_store.get(mobile)
+    if not verification_id:
+        return "OTP expired",400
 
     payload = {
-        "data": {
+        "data":{
             "otp": otp,
-            "message_id": message_id   # ✅ HERE
+            "verification_id": verification_id
         }
     }
 
-    headers = {
+    headers={
         "X-OTP-Key": OTP_API_KEY,
-        "Content-Type": "application/json"
+        "Content-Type":"application/json"
     }
 
-    r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
-    result = r.json()
+    r = requests.post(OTP_VERIFY_URL,json=payload,headers=headers)
+    result=r.json()
 
-    print("VERIFY RESPONSE:", result)
+    print("VERIFY:",result)
 
-    if r.status_code in [200, 201] and result.get("data", {}).get("status") == "verified":
-        session["user"] = mobile
-        verification_store.pop(mobile, None)
+    if result.get("data",{}).get("status")=="verified":
+        session["user"]=mobile
+        verification_store.pop(mobile,None)
         return redirect("/")
 
-    return "Invalid OTP", 401
+    return "Invalid OTP",401
 
 # ================= LOAN =================
 @app.route('/calculate', methods=['POST'])
@@ -167,5 +175,6 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
