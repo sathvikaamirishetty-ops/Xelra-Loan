@@ -310,6 +310,10 @@
 
             {% if error %}
             <div class="error-message">{{ error }}</div>
+            {% if demo_otp %}
+            <div style="background-color: #e0f2fe; color: #0369a1; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; border: 1px solid #7dd3fc;">
+                DEMO MODE: Your OTP is {{ demo_otp }}
+            </div>
             {% endif %}
 
             <form action="/verify-otp" method="POST" class="loan-form">
@@ -339,5 +343,6 @@
         </div>
     </div>
 </body>
+
 
 </html>
