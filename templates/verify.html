@@ -272,21 +272,6 @@
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-    </style>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        .verification-container {
-            max-width: 400px;
-            margin: 80px auto;
-            text-align: center;
-        }
-
-        .verification-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
 
         .error-message {
             color: #dc3545;
@@ -310,8 +295,11 @@
 
             {% if error %}
             <div class="error-message">{{ error }}</div>
+            {% endif %}
+
             {% if demo_otp %}
-            <div style="background-color: #e0f2fe; color: #0369a1; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; border: 1px solid #7dd3fc;">
+            <div
+                style="background-color: #e0f2fe; color: #0369a1; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; border: 1px solid #7dd3fc;">
                 DEMO MODE: Your OTP is {{ demo_otp }}
             </div>
             {% endif %}
@@ -343,6 +331,5 @@
         </div>
     </div>
 </body>
-
 
 </html>
