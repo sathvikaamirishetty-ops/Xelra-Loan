@@ -1,19 +1,19 @@
-from flask import Flask, render_template, request, redirect, session, flash
+from flask import Flask, render_template, request, redirect, session
 import requests
 import os
 
 app = Flask(__name__)
-# IMPORTANT: Use a real secret key in Vercel Environment Variables
 app.secret_key = os.getenv("SECRET_KEY", "temporary_dev_key_123")
 app.config["SESSION_COOKIE_SECURE"] = True
 
 # ================= OTP CONFIG =================
-OTP_API_URL = "https://api.otp.dev/v1/verifications"
-OTP_VERIFY_URL = "https://api.otp.dev/v1/verifications/verify"
+# Send OTP:   POST https://api.otp.dev/v1/verifications
+# Verify OTP: GET  https://api.otp.dev/v1/verifications?code={code}&phone={phone}
+# Both use the same base URL — verify is just a GET with query params.
+OTP_BASE_URL = "https://api.otp.dev/v1/verifications"
 
-# It's better to put these in Vercel Environment Variables
-OTP_API_KEY = os.getenv("OTP_API_KEY", "df2ea0a6b3e0a83be76ba95f55995fb8")
-OTP_SENDER = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
+OTP_API_KEY  = os.getenv("OTP_API_KEY", "df2ea0a6b3e0a83be76ba95f55995fb8")
+OTP_SENDER   = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
 OTP_TEMPLATE = "28791c9e-10b3-4740-aa38-6273244335fc"
 
 # ================= FILTER =================
@@ -35,7 +35,7 @@ def home():
 def login():
     return render_template("login.html")
 
-# ================= SEND OTP (FIXED) =================
+# ================= SEND OTP =================
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
     mobile = request.form.get("mobile")
@@ -55,92 +55,63 @@ def send_otp():
 
     headers = {
         "X-OTP-Key": OTP_API_KEY,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "accept": "application/json"
     }
 
-    r = requests.post(OTP_API_URL, json=payload, headers=headers)
+    r = requests.post(OTP_BASE_URL, json=payload, headers=headers)
     data = r.json()
 
-    print("FULL OTP RESPONSE:", data)
+    print("SEND OTP RESPONSE:", data)
 
     if r.status_code in [200, 201]:
-
-        message_id = data.get("data", {}).get("message_id")
-
-        if not message_id:
-            return f"No message_id found: {data}", 500
-
-        # ✅ FIX 2: Store message_id in session instead of in-memory dict
-        # This survives Vercel serverless restarts
-        session["pending_message_id"] = message_id
+        # Store mobile in session so we know who's verifying
         session["pending_mobile"] = mobile
-
         return render_template("verify.html", mobile=mobile)
 
-    return f"OTP API Error: {data}", 500
+    return f"OTP Send Error: {data}", 500
 
-# ================= VERIFY OTP (FIXED) =================
+# ================= VERIFY OTP =================
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
     mobile = request.form.get("mobile")
-    otp = request.form.get("otp", "").strip()
+    otp    = request.form.get("otp", "").strip()
 
-    print(f"Received mobile: {mobile}, OTP: {otp}")
-
-    if not otp or not otp.isdigit():
+    if not otp.isdigit():
         return "Invalid OTP format. Enter numbers only.", 400
 
-    message_id = session.get("pending_message_id")
-    session_mobile = session.get("pending_mobile")
+    if session.get("pending_mobile") != mobile:
+        return "Session lost. Please request a new OTP.", 400
 
-    print(f"Session message_id: {message_id}, Session mobile: {session_mobile}")
-
-    if not message_id or session_mobile != mobile:
-        return f"OTP expired. Session mobile: {session_mobile}, Input mobile: {mobile}", 400
-
-    payload = {
-        "data": {
-            "otp": otp,
-            "message_id": message_id
-        }
+    # Per docs:
+    #   GET https://api.otp.dev/v1/verifications?code={code}&phone={phone}
+    #   - phone must include country code (e.g. 91XXXXXXXXXX)
+    #   - If returned "data" array is empty → code is invalid
+    #   - If returned "data" array has entries → code is valid
+    params = {
+        "code": otp,
+        "phone": f"91{mobile}"
     }
 
     headers = {
         "X-OTP-Key": OTP_API_KEY,
-        "Content-Type": "application/json"
+        "accept": "application/json"
     }
 
-    print("SENDING VERIFY PAYLOAD:", payload)
-    print("HEADERS:", headers)
+    print("VERIFY REQUEST params:", params)
 
-    try:
-        r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
-        result = r.json()
+    r = requests.get(OTP_BASE_URL, params=params, headers=headers)
+    result = r.json()
 
-        print("VERIFY RESPONSE:", result)
-        print("STATUS CODE:", r.status_code)
-        print("RESPONSE HEADERS:", dict(r.headers))
+    print("VERIFY RESPONSE:", result)
 
-        if r.status_code in [200, 201]:
-            data = result.get("data", {})
-            
-            # Try multiple ways to check verification
-            if (data.get("status") == "verified" or 
-                data.get("verified") == True or 
-                result.get("status") == "verified" or
-                result.get("verified") == True):
-                
-                session["user"] = mobile
-                session.pop("pending_message_id", None)
-                session.pop("pending_mobile", None)
-                return redirect("/")
+    # Valid = data array is non-empty. Invalid = data array is empty.
+    if r.status_code == 200 and len(result.get("data", [])) > 0:
+        session["user"] = mobile
+        session.pop("pending_mobile", None)
+        return redirect("/")
 
-        return f"Verification failed. Status: {r.status_code}, Response: {result}", 401
-
-    except Exception as e:
-        print("ERROR:", str(e))
-        return f"Network error: {str(e)}", 500
-
+    return f"Invalid OTP. API response: {result}", 401
 
 # ================= LOAN =================
 @app.route('/calculate', methods=['POST'])
@@ -150,48 +121,44 @@ def calculate():
 
     try:
         income = float(request.form.get('income', 0))
-        emis = float(request.form.get('existing_emis', 0))
+        emis   = float(request.form.get('existing_emis', 0))
     except ValueError:
         return "Please enter valid numbers for income and EMIs", 400
 
     cibil = request.form.get('cibil_band')
-    
+
     cibil_map = {
-        "650": 600,
-        "650–700": 675,
-        "700–750": 725,
-        "750+": 780
+        "650":      600,
+        "650–700":  675,
+        "700–750":  725,
+        "750+":     780
     }
 
-    score = cibil_map.get(cibil, 700)
+    score   = cibil_map.get(cibil, 700)
     results = []
 
-    # HDFC Calculation
     hdfc_amt = max((income * .55) - emis, 0) * 20 if score >= 700 else 0
-    # BOB Calculation
-    bob_amt = max((income * .45) - emis, 0) * 18 if score >= 680 else 0
+    bob_amt  = max((income * .45) - emis, 0) * 18 if score >= 680 else 0
 
     results.append({
-        "bank_name": "HDFC Bank",
-        "amount": hdfc_amt,
+        "bank_name":     "HDFC Bank",
+        "amount":        hdfc_amt,
         "interest_rate": "8% – 12%",
-        "color_theme": "#004c8f",
-        "logo_text": "HDFC",
-        "details": "Eligibility based on FOIR"
+        "color_theme":   "#004c8f",
+        "logo_text":     "HDFC",
+        "details":       "Eligibility based on FOIR"
     })
 
     results.append({
-        "bank_name": "Bank of Baroda",
-        "amount": bob_amt,
+        "bank_name":     "Bank of Baroda",
+        "amount":        bob_amt,
         "interest_rate": "9% – 14%",
-        "color_theme": "#f26522",
-        "logo_text": "BoB",
-        "details": "Standard criteria"
+        "color_theme":   "#f26522",
+        "logo_text":     "BoB",
+        "details":       "Standard criteria"
     })
 
     return render_template("results.html", results=results, income=income)
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
