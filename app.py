@@ -83,48 +83,42 @@ def send_otp():
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
     mobile = request.form.get("mobile")
-    otp = request.form.get("otp", "").strip()  # ✅ FIX 3: Strip whitespace
-
-    # ✅ FIX 1: Convert OTP to integer — API likely expects int, not string
-    try:
-        otp = int(otp)
-    except ValueError:
+    otp = request.form.get("otp", "").strip()
+    # Don't convert to int - keep as string
+    if not otp or not otp.isdigit():
         return "Invalid OTP format. Enter numbers only.", 400
-
-    # ✅ FIX 2: Read message_id from session instead of in-memory dict
     message_id = session.get("pending_message_id")
-
     if not message_id or session.get("pending_mobile") != mobile:
         return "OTP expired. Please request again.", 400
-
     payload = {
         "data": {
-            "otp": otp,
+            "otp": otp,  # Keep as string
             "message_id": message_id
         }
     }
-
     headers = {
         "X-OTP-Key": OTP_API_KEY,
         "Content-Type": "application/json"
     }
-
-    # ✅ Debug: See exactly what is being sent to the API
     print("SENDING VERIFY PAYLOAD:", payload)
-
     r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
     result = r.json()
-
     print("VERIFY RESPONSE:", result)
-
-    if r.status_code in [200, 201] and result.get("data", {}).get("status") == "verified":
-        session["user"] = mobile
-        # ✅ FIX 2: Clean up pending OTP data from session
-        session.pop("pending_message_id", None)
-        session.pop("pending_mobile", None)
-        return redirect("/")
-
-    return "Invalid OTP", 401
+    print("STATUS CODE:", r.status_code)
+    # Check for different success indicators
+    if r.status_code in [200, 201]:
+        data = result.get("data", {})
+        status = data.get("status")
+        verified = data.get("verified")
+        
+        print("STATUS:", status, "VERIFIED:", verified)
+        
+        if status == "verified" or verified == True:
+            session["user"] = mobile
+            session.pop("pending_message_id", None)
+            session.pop("pending_mobile", None)
+            return redirect("/")
+    return f"Invalid OTP. Response: {result}", 401
 
 # ================= LOAN =================
 @app.route('/calculate', methods=['POST'])
@@ -177,3 +171,4 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
