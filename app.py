@@ -16,9 +16,6 @@ OTP_API_KEY = os.getenv("OTP_API_KEY", "df2ea0a6b3e0a83be76ba95f55995fb8")
 OTP_SENDER = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
 OTP_TEMPLATE = "28791c9e-10b3-4740-aa38-6273244335fc"
 
-# WARNING: This dict will clear frequently on Vercel because of Serverless restarts.
-verification_store = {}
-
 # ================= FILTER =================
 @app.template_filter('currency')
 def format_currency(amount):
@@ -68,14 +65,15 @@ def send_otp():
 
     if r.status_code in [200, 201]:
 
-        # ✅ USE message_id INSTEAD
         message_id = data.get("data", {}).get("message_id")
 
         if not message_id:
             return f"No message_id found: {data}", 500
 
-        # Store message_id
-        verification_store[mobile] = message_id
+        # ✅ FIX 2: Store message_id in session instead of in-memory dict
+        # This survives Vercel serverless restarts
+        session["pending_message_id"] = message_id
+        session["pending_mobile"] = mobile
 
         return render_template("verify.html", mobile=mobile)
 
@@ -85,17 +83,24 @@ def send_otp():
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
     mobile = request.form.get("mobile")
-    otp = request.form.get("otp")
+    otp = request.form.get("otp", "").strip()  # ✅ FIX 3: Strip whitespace
 
-    message_id = verification_store.get(mobile)
+    # ✅ FIX 1: Convert OTP to integer — API likely expects int, not string
+    try:
+        otp = int(otp)
+    except ValueError:
+        return "Invalid OTP format. Enter numbers only.", 400
 
-    if not message_id:
+    # ✅ FIX 2: Read message_id from session instead of in-memory dict
+    message_id = session.get("pending_message_id")
+
+    if not message_id or session.get("pending_mobile") != mobile:
         return "OTP expired. Please request again.", 400
 
     payload = {
         "data": {
             "otp": otp,
-            "message_id": message_id   # ✅ HERE
+            "message_id": message_id
         }
     }
 
@@ -104,6 +109,9 @@ def verify_otp():
         "Content-Type": "application/json"
     }
 
+    # ✅ Debug: See exactly what is being sent to the API
+    print("SENDING VERIFY PAYLOAD:", payload)
+
     r = requests.post(OTP_VERIFY_URL, json=payload, headers=headers)
     result = r.json()
 
@@ -111,7 +119,9 @@ def verify_otp():
 
     if r.status_code in [200, 201] and result.get("data", {}).get("status") == "verified":
         session["user"] = mobile
-        verification_store.pop(mobile, None)
+        # ✅ FIX 2: Clean up pending OTP data from session
+        session.pop("pending_message_id", None)
+        session.pop("pending_mobile", None)
         return redirect("/")
 
     return "Invalid OTP", 401
@@ -167,7 +177,3 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
