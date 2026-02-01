@@ -9,7 +9,7 @@ app.secret_key = os.getenv("SECRET_KEY", "dev_secret_key_123")
 
 # IMPORTANT:
 # Must be False for localhost / testing
-# Set True ONLY when running on HTTPS
+# Set True only when your site is HTTPS
 app.config["SESSION_COOKIE_SECURE"] = False
 
 
@@ -60,14 +60,17 @@ def send_otp():
 
     r = requests.post(OTP_BASE_URL, json=payload, headers=headers)
 
-    print("SEND OTP STATUS:", r.status_code)
-    print("SEND OTP RESPONSE:", r.text)
+    # 🔍 FULL DEBUG (VERY IMPORTANT)
+    print("========== SEND OTP ==========")
+    print("STATUS:", r.status_code)
+    print("RESPONSE:", r.text)
+    print("==============================")
 
     if r.status_code in (200, 201):
         session["pending_mobile"] = mobile
         return render_template("verify.html", mobile=mobile)
 
-    return "Failed to send OTP", 500
+    return "OTP sending failed", 500
 
 
 # ================= VERIFY OTP =================
@@ -80,7 +83,7 @@ def verify_otp():
         return "Invalid OTP format", 400
 
     if session.get("pending_mobile") != mobile:
-        return "OTP expired. Request again.", 400
+        return "OTP expired. Please try again.", 400
 
     params = {
         "code": otp,
@@ -93,14 +96,17 @@ def verify_otp():
     }
 
     r = requests.get(OTP_BASE_URL, params=params, headers=headers)
+
+    print("========== VERIFY OTP ==========")
+    print("STATUS:", r.status_code)
+    print("RESPONSE:", r.text)
+    print("===============================")
+
     result = r.json()
 
-    print("VERIFY STATUS:", r.status_code)
-    print("VERIFY RESPONSE:", result)
-
-    # otp.dev rule:
-    # data array empty  => invalid OTP
-    # data array filled => valid OTP
+    # otp.dev logic:
+    # data[] empty  -> invalid OTP
+    # data[] filled -> valid OTP
     if r.status_code == 200 and len(result.get("data", [])) > 0:
         session["user"] = mobile
         session.pop("pending_mobile", None)
