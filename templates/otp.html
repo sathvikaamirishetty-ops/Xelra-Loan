@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enter OTP - Loan Eligibility</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .verification-container {
+            max-width: 400px;
+            margin: 80px auto;
+            text-align: center;
+        }
+
+        .verification-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .error-message {
+            color: #dc3545;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .resend-link {
+            display: block;
+            margin-top: 1rem;
+            color: #666;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .resend-link:hover {
+            color: #333;
+            text-decoration: underline;
+        }
+
+        .mobile-display {
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container verification-container">
+        <div class="verification-card">
+            <h1>Verify OTP</h1>
+            <p class="mobile-display">Sent to {{ mobile }}</p>
+
+            {% if error %}
+            <div class="error-message">{{ error }}</div>
+            {% endif %}
+
+            <form action="/verify_otp" method="POST" class="loan-form">
+                <div class="form-group">
+                    <label for="otp">One Time Password</label>
+                    <input type="text" id="otp" name="otp" required placeholder="Enter 4-digit OTP" pattern="[0-9]{4}"
+                        title="Please enter the 4-digit OTP" maxlength="4"
+                        style="text-align: center; letter-spacing: 4px; font-size: 1.2rem;">
+                </div>
+                <button type="submit" class="cta-button">Verify OTP</button>
+            </form>
+
+            <a href="/" class="resend-link">Change Mobile Number</a>
+        </div>
+    </div>
+</body>
+
+</html>

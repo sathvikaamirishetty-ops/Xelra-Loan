@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Mobile - Loan Eligibility</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .verification-container {
+            max-width: 400px;
+            margin: 80px auto;
+            text-align: center;
+        }
+
+        .verification-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container verification-container">
+        <div class="verification-card">
+            <h1>Welcome</h1>
+            <p class="subtitle" style="margin-bottom: 2rem;">Please verify your mobile number to continue.</p>
+
+            <form action="/send_otp" method="POST" class="loan-form">
+                <div class="form-group">
+                    <label for="mobile">Mobile Number</label>
+                    <input type="tel" id="mobile" name="mobile" required placeholder="Enter 10-digit number"
+                        pattern="[0-9]{10}" title="Please enter a valid 10-digit mobile number">
+                </div>
+                <button type="submit" class="cta-button">Send OTP</button>
+            </form>
+        </div>
+    </div>
+</body>
+
+</html>

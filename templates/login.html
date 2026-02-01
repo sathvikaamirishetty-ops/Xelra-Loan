@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xelra - Loan Eligibility</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Login - Loan Eligibility</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary-color: #2563eb;
@@ -274,63 +274,23 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
-    <div class="container">
-        <header>
-            <h1><span style="color: #dc3545; font-weight: 700;">X</span>elra Loan Eligibility</h1>
-            <p class="subtitle">Instant estimation across top banks</p>
-        </header>
+    <div class="container verification-container">
+        <div class="verification-card">
+            <h1>Welcome to <span style="color: #dc3545; font-weight: 700;">X</span>elra</h1>
+            <p class="subtitle" style="margin-bottom: 2rem;">Please enter your mobile number to log in.</p>
 
-        <form action="/calculate" method="POST" class="loan-form">
-            <div class="form-group">
-                <label for="income">Monthly Income (₹)</label>
-                <input type="number" id="income" name="income" required placeholder="e.g. 80000">
-            </div>
-
-            <div class="form-group">
-                <label for="employment_type">Employment Type</label>
-                <select id="employment_type" name="employment_type">
-                    <option value="Salaried">Salaried</option>
-                    <option value="Self-employed">Self-employed</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="cibil_band">Credit Score (CIBIL)</label>
-                <select id="cibil_band" name="cibil_band">
-                    <option value="750+">750+ (Excellent)</option>
-                    <option value="700–750">700 – 750 (Good)</option>
-                    <option value="650–700">650 – 700 (Average)</option>
-                    <option value="<650">Below 650 (Needs Improvement)</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="existing_emis">Current Monthly EMIs (₹)</label>
-                <input type="number" id="existing_emis" name="existing_emis" value="0" placeholder="e.g. 15000">
-            </div>
-
-            <div class="form-row">
-                <div class="form-group half">
-                    <label for="loan_tenure">Tenure (Years)</label>
-                    <input type="number" id="loan_tenure" name="loan_tenure" value="20" placeholder="20">
+            <form action="/send-otp" method="POST" class="loan-form">
+                <div class="form-group">
+                    <label for="mobile">Mobile Number</label>
+                    <input type="tel" id="mobile" name="mobile" required placeholder="Enter 10-digit number"
+                        pattern="[0-9]{10}" title="Please enter a valid 10-digit mobile number">
                 </div>
-                <div class="form-group half">
-                    <label for="loan_type">Loan Type</label>
-                    <select id="loan_type" name="loan_type">
-                        <option value="Home">Home Loan</option>
-                        <option value="Personal">Personal Loan</option>
-                    </select>
-                </div>
-            </div>
-
-            <button type="submit" class="cta-button">Check Eligibility</button>
-        </form>
-
-
+                <button type="submit" class="cta-button">Send OTP</button>
+            </form>
+        </div>
     </div>
 </body>
 
