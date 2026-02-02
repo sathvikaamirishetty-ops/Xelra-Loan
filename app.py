@@ -16,8 +16,8 @@ app.jinja_env.filters['currency'] = format_currency
 
 # OTP.dev configuration (USE ENV VARIABLES IN VERCEL)
 OTP_API_KEY = os.environ.get("OTP_API_KEY")
-SENDER_ID = "5e8368ab-b795-4adc-9088-4a5f21b58f99"
-TEMPLATE_ID = "326dc91a-e63d-4828-9f25-1244ba3662d4"
+SENDER_ID = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
+TEMPLATE_ID = "28791c9e-10b3-4740-aa38-6273244335fc"
 
 
 @app.route("/")
@@ -201,3 +201,4 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
+
