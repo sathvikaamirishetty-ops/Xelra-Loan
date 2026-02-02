@@ -16,8 +16,8 @@ app.jinja_env.filters['currency'] = format_currency
 
 # OTP.dev configuration (USE ENV VARIABLES IN VERCEL)
 OTP_API_KEY = os.environ.get("OTP_API_KEY")
-SENDER_ID = "faf6cb19-c47c-48b8-9b04-d29dc7a97ab2"
-TEMPLATE_ID = "28791c9e-10b3-4740-aa38-6273244335fc"
+SENDER_ID = "5e8368ab-b795-4adc-9088-4a5f21b58f99"
+TEMPLATE_ID = "326dc91a-e63d-4828-9f25-1244ba3662d4"
 
 
 @app.route("/")
@@ -36,41 +36,42 @@ def login():
 
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
-    phone = request.form.get("phone")
+    mobile = request.form.get("mobile")
 
-    url = "https://api.otp.dev/v1/verifications"
+    if not mobile or not mobile.isdigit() or len(mobile) != 10:
+        return "Invalid mobile number", 400
 
-    headers = {
-        "X-OTP-Key": "YOUR_API_KEY",
-        "Content-Type": "application/json"
-    }
+    full_phone = "91" + mobile
 
-    payload = {
-        "data": {
-            "channel": "sms",
-            "sender": "OTP",
-            "recipient": phone
+    response = requests.post(
+        "https://api.otp.dev/v1/verifications",
+        headers={
+            "X-OTP-Key": OTP_API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        json={
+            "data": {
+                "channel": "sms",
+                "sender": SENDER_ID,
+                "phone": full_phone,
+                "template": TEMPLATE_ID,
+                "code_length": 4
+            }
         }
-    }
+    )
 
-    try:
-        response = requests.post(url, json=payload, headers=headers)
+    data = response.json()
 
-        print("Status Code:", response.status_code)
-        print("Raw Response:", response.text)  # 🔥 VERY IMPORTANT
+    # Accept 200 and 201
+    if not response.ok:
+        return f"OTP Send Failed: {data}", 400
 
-        if response.status_code != 200:
-            return f"API Error: {response.text}", 400
+    # IMPORTANT: otp.dev returns message_id (not id)
+    session["verification_id"] = data["data"]["message_id"]
+    session["mobile"] = mobile
 
-        try:
-            data = response.json()
-        except Exception:
-            return f"Invalid JSON response: {response.text}", 400
-
-        return "OTP Sent Successfully"
-
-    except Exception as e:
-        return f"Error: {str(e)}", 500
+    return render_template("verify.html", mobile=mobile)
 
 
 # ---------------- VERIFY OTP ---------------- #
@@ -200,5 +201,3 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
-
-
